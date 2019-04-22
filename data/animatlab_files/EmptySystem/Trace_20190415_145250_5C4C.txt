@@ -1,0 +1,18 @@
+[DETAIL 15/04/2019 14:52:50_639_5690] MStdXml.cpp (1672) 
+StdXml::Load: C:\Users\Fletcher\AppData\Roaming\AnimatLab\AnimatUser.config
+
+[DETAIL 15/04/2019 14:52:50_640_5690] MStdXml.cpp (211) 
+StdXml::FindElement: Config
+
+[DETAIL 15/04/2019 14:52:50_641_5690] MStdXml.cpp (325) 
+, Default: 
+
+[DETAIL 15/04/2019 14:52:50_642_5690] MStdXml.cpp (325) 
+, Default: Daily
+
+[DETAIL 15/04/2019 14:52:50_642_5690] MStdXml.cpp (325) 
+, Default: 1/1/2001
+
+[NONE 15/04/2019 14:52:50_643_5690] Logger.cpp (34) 
+LogFile: C:\Program Files (x86)\NeuroRobotic Technologies\AnimatLab\bin\Logs\AnimatLab
+
