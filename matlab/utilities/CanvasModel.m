@@ -1,4 +1,3 @@
-% Copyright (c) 2016, The MathWorks, Inc.
 classdef CanvasModel < handle
     
     properties (SetAccess = public, GetAccess=public)
@@ -53,7 +52,7 @@ classdef CanvasModel < handle
             %so that the object doesn't go out of bounds
             
 %             pos = CanvasConstants.ConstrainedPosition(type_char, pos);
-                pos = obj.ConstrainedPosition(type_char, pos, bounds);
+            pos = obj.ConstrainedPosition(type_char, pos, bounds);
             
             if type_char == 'n' %neuron
                 obj.neurons_positions(end+1,:) = pos;
@@ -64,6 +63,10 @@ classdef CanvasModel < handle
                     obj.neuron_objects(obj.num_neurons,1) = obj.create_neuron(pos);
                 end
                 index = obj.num_neurons;
+            elseif strcmp(type_char,'stimulus')
+                [~,modelInd] = min(abs(sum(obj.neurons_positions-pos,2)));
+                obj.create_stimulus(modelInd);
+                index = modelInd;
             else %obstacle
                 obj.obstacles_positions(end+1,:) = pos;
                 obj.num_obstacles = size(obj.obstacles_positions, 1);
@@ -310,6 +313,34 @@ classdef CanvasModel < handle
             end
             
         end
+        %% create_stimulus
+        function create_stimulus(obj, neurModInd)
+            newstim = struct;
+            newstim.name = [obj.neuron_objects(neurModInd).ID(1:end-3),'-stim'];
+            newstim.ID = ['stimID-',num2str(neurModInd)];
+            newstim.starttime = randi([0 3],1);
+            newstim.endtime = randi([5 8],1);
+            newstim.amplitude = randi([10 15],1);
+            newstim.enabled = 1;
+                dt = 5e-3;
+                simendtime = 10;
+                t = 0:dt:simendtime;
+%                 stim_wave = 0*linspace(0,simendtime,1/dt);
+                stim_wave = zeros(size(t));
+                ind = @(time) time/dt+1;
+            start_ind = ind(newstim.starttime);
+            end_ind = ind(newstim.endtime);
+            stim_wave(start_ind:end_ind) = newstim.amplitude;
+            newstim.waveform = stim_wave;
+            Cm = 10; %%%%%
+            Gm = 1; %%%%%
+                totmem_wave = zeros(size(stim_wave));
+                for i = 2:length(stim_wave)
+                    totmem_wave(i) = totmem_wave(i-1) + (dt/Cm)*(stim_wave(i)-Gm*totmem_wave(i-1));
+                end
+            obj.neuron_objects(neurModInd).totmem = totmem_wave;
+            obj.neuron_objects(neurModInd).stimulus = newstim;
+        end
         %% create_link
         function link = create_link(~,pos)
             link = struct;
@@ -425,6 +456,8 @@ classdef CanvasModel < handle
             neuron.tonicstimulus = CanvasConstants.NEURON_tonicstimulus;
             neuron.tonicnoise = CanvasConstants.NEURON_tonicnoise;
             neuron.type = 'n';
+            neuron.stimulus = {};
+            neuron.totmem = {};
         end
         %% create_animatlab project
         function create_animatlab_project(obj)
@@ -512,6 +545,36 @@ classdef CanvasModel < handle
             urCond = pos > topRightLimits;
             pos(urCond) = topRightLimits(urCond);
             pos = floor(pos);
+        end
+        %% updateStimModel
+        function updateStimModel(obj,neur_index)
+                %Hardcoded, to be changed
+                stim = obj.neuron_objects(neur_index).stimulus;
+                dt = 5e-3;
+                simendtime = 10;
+                
+                %Calculate new stimulus
+                amp = stim.amplitude;
+                t = 0:dt:simendtime;
+                stim_wave = zeros(size(t));
+                ind = @(time) time/dt+1;
+                start_ind = ind(stim.starttime);
+                end_ind = ind(stim.endtime);
+                stim_wave(start_ind:end_ind) = amp;
+                
+                %Store the stimulus waveform in the model
+                obj.neuron_objects(neur_index).stimulus.waveform = stim_wave;
+                
+                %Calculate new total membrane response
+                Cm = 10; %%%%%
+                Gm = 1; %%%%%
+                totmem_wave = zeros(size(stim_wave));
+                for i = 2:length(stim_wave)
+                    totmem_wave(i) = totmem_wave(i-1) + (dt/Cm)*(stim_wave(i)-Gm*totmem_wave(i-1));
+                end
+                
+                %Store the total membrane response in the model
+                obj.neuron_objects(neur_index).totmem = totmem_wave;
         end
     end
     

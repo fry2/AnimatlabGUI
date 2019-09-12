@@ -45,6 +45,9 @@ classdef CanvasView < matlab.mixin.SetGet
             
             obj.setupAxesAndImage(varargin{:});
             
+            obj.setupStimAxes();
+            obj.setupStimForm();
+            
             obj.setupAxisChanger();
             
             obj.setupForm();
@@ -96,6 +99,21 @@ classdef CanvasView < matlab.mixin.SetGet
                     for i=1:size(obj.graphic_objects.FormObjs{2},1)
                         obj.graphic_objects.FormObjs{2}(i,2).UserData = {type,index};
                     end
+                    if ~isempty(neuron.stimulus)
+                        stim = neuron.stimulus;
+                        obj.graphic_objects.FormObjs{4}(1,2).String = stim.name;
+                        obj.graphic_objects.FormObjs{4}(2,2).String = stim.amplitude;
+                        obj.graphic_objects.FormObjs{4}(3,2).String = stim.starttime;
+                        obj.graphic_objects.FormObjs{4}(4,2).String = stim.endtime;
+                        obj.graphic_objects.FormObjs{4}(5,2).Value = stim.enabled;
+                        obj.updateStimPlot(stim);
+                        for i=1:size(obj.graphic_objects.FormObjs{4},1)
+                            obj.graphic_objects.FormObjs{4}(i,2).UserData = {'stim',index};
+                        end
+                        obj.enableForm('stimulus');
+                    else
+                        obj.disableForm('stimulus')
+                    end
                 case 'l'
                     link = obj.model.link_objects(index);
                     synapse = obj.model.synapse_types(contains({obj.model.synapse_types.name},link.synaptictype));
@@ -123,6 +141,10 @@ classdef CanvasView < matlab.mixin.SetGet
                         formnumber = 2;
                     case 'l'
                         formnumber = 3;
+                    case 'stimulus'
+                        formnumber = 4;
+                        cla(obj.graphic_objects.axes_stim)
+                        cla(obj.graphic_objects.axes_totmem)
                 end
                 for i = 1:length(formnumber)
                     numLines = size(obj.graphic_objects.FormObjs{formnumber(i)},1);
@@ -141,21 +163,24 @@ classdef CanvasView < matlab.mixin.SetGet
                     error('enableForm in obj.view was passed a non-cell object type. Type changed to first valid type input.\n')
                 end
             end
+            childrenInfo = cell(length(obj.Parent.Children),1);
+            for i=1:length(obj.Parent.Children)
+                childrenInfo{i} = obj.Parent.Children(i).UserData;
+            end
+            component_panel = strcmp(childrenInfo,'Component Data Panel');
             for k = 1:length(type)
-                childrenInfo = cell(length(obj.Parent.Children),1);
-                for i=1:length(obj.Parent.Children)
-                    childrenInfo{i} = obj.Parent.Children(i).UserData;
-                end
-                component_panel = strcmp(childrenInfo,'Component Data Panel');
                 switch type{k}
                     case 'n'
                         selected_tab = obj.Parent.Children(component_panel).Children.Children(1);
+                        obj.Parent.Children(component_panel).Children.SelectedTab = selected_tab;
                         formnumber = 2;
                     case 'l'
                         selected_tab = obj.Parent.Children(component_panel).Children.Children(2);
+                        obj.Parent.Children(component_panel).Children.SelectedTab = selected_tab;
                         formnumber = 3;
+                    case 'stimulus'
+                        formnumber = 4;
                 end
-                obj.Parent.Children(component_panel).Children.SelectedTab = selected_tab;
                 numFormObjs = size(obj.graphic_objects.FormObjs{formnumber},1);
                 for i=1:numFormObjs
                     for j=1:2
@@ -244,8 +269,8 @@ classdef CanvasView < matlab.mixin.SetGet
     methods (Access=private) % constructor and destructor
         %% setupAxisChanger : the data entry form panel
         function setupAxisChanger(obj)
-            formpanel = obj.Parent.Children(2);
-            changerpos = [.1 .93 .15 .03];
+            formpanel = obj.Parent.Children(contains({obj.Parent.Children.Title},'Canvas Area'));
+            changerpos = [.1 .95 .15 .03];
             
             changerlabel = uicontrol(formpanel,'Style','text',...
                 'String','Axis Limits: ',...
@@ -259,17 +284,65 @@ classdef CanvasView < matlab.mixin.SetGet
                 'Enable','on',...
                 'FontSize',12,...
                 'Units','normalized',...
-                'Position',changerpos+[.15 0 .5 0],...
+                'Position',changerpos+[.15 0 .46 0],...
                 'Callback', {@obj.fieldCallback,'axislimits'});
             
             obj.graphic_objects.FormObjs{1}(1,1) = changerlabel;
             obj.graphic_objects.FormObjs{1}(1,2) = changerfield;
         end
+        %% setupStimForm : setup Stimulus data entry section
+        function setupStimForm(obj)
+%             formpanel = obj.Parent.Children(1);
+            formpanel = obj.Parent.Children(contains({obj.Parent.Children.Title},'Stimulus Panel'));
+            stimtab = formpanel.Children.Children(1);
+            memtab = formpanel.Children.Children(2);
+            fields = {'Name','name',[];...
+                    'Amplitude','amplitude',[0 15];...
+                    'Start Time','starttime',[0 10];...
+                    'End Time','endtime',[0 10];...
+                    'Enabled','enabled',0;...
+                    'Import','stimimport',0};
+                
+            fieldwidth = .15;
+            labelbox = @(labelnum) [.76 .69-(labelnum-1)*.12 .05 .1];
+            fieldbox = @(fieldnum) [.81 .7-(fieldnum-1)*.12 fieldwidth .1]; 
+            
+            for i=1:length(fields)
+                label_stim = uicontrol(stimtab,'Style','text',...
+                    'String',[fields{i},': '],...
+                    'HorizontalAlignment','right',...
+                    'FontSize',9,...
+                    'Enable','off',...
+                    'Units','normalized',...
+                    'Position',labelbox(i));
+
+                if size(fields{i,3},2) == 1
+                    field_stim = uicontrol(stimtab,'Style','radiobutton',...
+                        'Enable','off',...
+                        'FontSize',9,...
+                        'Units','normalized',...
+                        'Position',fieldbox(i),...
+                        'Callback', {@obj.fieldCallback,fields{i,2},fields{i,3}});
+                else
+                    field_stim = uicontrol(stimtab,'Style','edit',...
+                        'Enable','off',...
+                        'FontSize',9,...
+                        'Units','normalized',...
+                        'Position',fieldbox(i),...
+                        'Callback', {@obj.fieldCallback,fields{i,2},fields{i,3}});
+                end
+
+                %%% Stimulus Fields
+                obj.graphic_objects.FormObjs{4}(i,1) = label_stim;
+                    obj.graphic_objects.FormObjs{4}(i,2) = field_stim;
+            end
+        end
         %% setupForm : the data entry form panel
         function setupForm(obj)
 %             formpanel = obj.Parent.Children(1);
-            formtab1 = obj.Parent.Children(1).Children.Children(1);
-            formtab2 = obj.Parent.Children(1).Children.Children(2);
+            formpanel = obj.Parent.Children(contains({obj.Parent.Children.Title},'Component Data'));
+            formtab1 = formpanel.Children.Children(1);
+            formtab2 = formpanel.Children.Children(2);
             namepos = [0 .9 .15 .03];
             restpos = namepos+[0 -.05 .17 0];
             
@@ -389,21 +462,18 @@ classdef CanvasView < matlab.mixin.SetGet
                 index = namefield.UserData{2};
                 
                 %what's the model tag and what's the form number
-                if strcmp(type,'n')
-                    node_type = 'neuron_objects';
-                    formnum = 2;
-                elseif strcmp(type,'l')
-                    % for links, not changing link properties, changing synapse properties
-                    node_type = 'synapse_types';
-                    formnum = 3;
-                    index = find(contains({obj.model.synapse_types.name},obj.model.link_objects(index).synaptictype));
-                end
-                
-                % load the field content into the input variable. different method needed for character of numbers
-                if ~isnan(str2double(get(namefield,'String')))
-                    input = str2double(get(namefield,'String'));
-                else
-                    input = get(namefield,'String');
+                switch type
+                    case'n'
+                        node_type = 'neuron_objects';
+                        formnum = 2;
+                    case'l'
+                        % for links, not changing link properties, changing synapse properties
+                        node_type = 'synapse_types';
+                        formnum = 3;
+                        index = find(contains({obj.model.synapse_types.name},obj.model.link_objects(index).synaptictype));
+                    case 'stim'
+                        node_type = 'neuron_objects';
+                        formnum = 4;
                 end
                 
                 % to automate, need to know which field we're editing
@@ -412,26 +482,75 @@ classdef CanvasView < matlab.mixin.SetGet
                 [~,formrow] = max(sum(ismember(formpositions,namefield.Position),2));
                 formrow = formrow - formchunks/2;
                 
-                % if the value that was entered is not the same type as that which is already in the document, don't accept it
-                % stops user from entering strings where numbers should be and vice versa
-                if ~strcmp(class(input),class(obj.model.(node_type)(index).(field)))
-                    obj.graphic_objects.FormObjs{formnum}(formrow,2).String = obj.model.(node_type)(index).(field);
-                    warning('Dissimilar variable types. Value not saved.')
-                    return
-                else
-                    if ischar(input)
-                        % if it gets to this point, then the user has entered a string where a string should be. just accept it.
-                        obj.model.(node_type)(index).(field) = input;
-                    else
-                        % need to take an extra step and check bounds before deciding to accept values
-                        % if the entered value is out of bounds, let the user know and then reload the current value from the model
-                        if input < bounds(1) || input > bounds(2)
-                            obj.graphic_objects.FormObjs{formnum}(formrow,2).String = obj.model.(node_type)(index).(field);
-                            fprintf('%s out of bounds (%.0f, %.0f). Value not saved.\n',field,bounds(1),bounds(2))
+                switch namefield.Style
+                    case 'radiobutton'
+                        obj.graphic_objects.FormObjs{1,4}(formrow,2).Value = namefield.Value;
+                        obj.model.neuron_objects(index).stimulus.enabled = namefield.Value;
+                    case 'edit'
+                        % load the field content into the input variable. different method needed for character of numbers
+                        if ~isnan(str2double(get(namefield,'String')))
+                            input = str2double(get(namefield,'String'));
                         else
-                            obj.model.(node_type)(index).(field) = input;
-                        end 
-                    end
+                            input = get(namefield,'String');
+                        end
+                        
+                        if strcmp(type,'stim')
+                            %STIMULUS FORM ENTRIES
+                            %to follow the structure access rules, there needs to be a special case
+                            %for stimuli that appends '.stimulus.(field)'
+                            %All the same input checking rules apply as described below
+                            if ~strcmp(class(input),class(obj.model.(node_type)(index).stimulus.(field)))
+                                obj.graphic_objects.FormObjs{formnum}(formrow,2).String = obj.model.(node_type)(index).stimulus.(field);
+                                warning('Dissimilar variable types. Value not saved.')
+                                return
+                            else
+                                if ischar(input)
+                                    obj.model.(node_type)(index).stimulus.(field) = input;
+                                else
+                                    switch field
+                                        case 'starttime'
+                                            t2 = obj.model.(node_type)(index).stimulus.endtime;
+                                            bounds = [0 t2];
+                                        case'endtime'
+                                            t1 = obj.model.(node_type)(index).stimulus.starttime;
+                                            bounds = [t1 10];
+                                        case 'amplitude'
+                                            bounds = [0 15];
+                                    end
+                                    if input < bounds(1) || input > bounds(2) 
+                                        obj.graphic_objects.FormObjs{formnum}(formrow,2).String = obj.model.(node_type)(index).stimulus.(field);
+                                        fprintf('Stimulus parameter %s (%.0f) is out of bounds [%.0f, %.0f]. Value not saved.\n',field,input,bounds(1),bounds(2))
+                                    else
+                                        obj.model.(node_type)(index).stimulus.(field) = input;
+                                    end 
+                                end
+                            end
+                            obj.model.updateStimModel(index)
+                            obj.updateStimPlot(obj.model.(node_type)(index).stimulus);
+                        else
+                            %NEURON OR LINK ENTRIES
+                            % if the value that was entered is not the same type as that which is already in the document, don't accept it
+                            % stops user from entering strings where numbers should be and vice versa
+                            if ~strcmp(class(input),class(obj.model.(node_type)(index).(field)))
+                                obj.graphic_objects.FormObjs{formnum}(formrow,2).String = obj.model.(node_type)(index).(field);
+                                warning('Dissimilar variable types. Value not saved.')
+                                return
+                            else
+                                if ischar(input)
+                                    % if it gets to this point, then the user has entered a string where a string should be. just accept it.
+                                    obj.model.(node_type)(index).(field) = input;
+                                else
+                                    % need to take an extra step and check bounds before deciding to accept values
+                                    % if the entered value is out of bounds, let the user know and then reload the current value from the model
+                                    if input < bounds(1) || input > bounds(2)
+                                        obj.graphic_objects.FormObjs{formnum}(formrow,2).String = obj.model.(node_type)(index).(field);
+                                        fprintf('%s out of bounds (%.0f, %.0f). Value not saved.\n',field,bounds(1),bounds(2))
+                                    else
+                                        obj.model.(node_type)(index).(field) = input;
+                                    end 
+                                end
+                            end
+                        end
                 end
             else
                 input = get(namefield,'String');
@@ -482,6 +601,57 @@ classdef CanvasView < matlab.mixin.SetGet
                 
                 obj.notify('canvasSizeChanged');
             end
+            
+        end
+        %% setupStimAxes
+        function setupStimAxes(obj)
+            stimpanel = obj.Parent.Children(contains({obj.Parent.Children.Title},'Stimulus Panel'));
+            stimtab = stimpanel.Children.Children(1);
+            memtab = stimpanel.Children.Children(2);
+            % setup axes limits
+            dt = 5e-3;
+            stimendtime = 10;
+            maxtime = 10;
+            for i=1:2
+                switch i
+                    case 1
+                        tabb = stimtab;
+                        struct_inf = 'axes_stim';
+                        im_inf = 'image_stim';
+                    case 2
+                        tabb = memtab;
+                        struct_inf = 'axes_totmem';
+                        im_inf = 'image_totmem';
+                end
+                
+                ax = axes(...
+                    'Box','on',...
+                    'SelectionHighlight', 'off',...
+                    'DeleteFcn', @(~,~) delete(obj),...
+                    'HandleVisibility', 'off', ...
+                    'Parent',tabb,...
+                    'Position',[.03 .1 .7 .8],...
+                    'XLim',[0 stimendtime/dt+1],...
+                    'XTickLabel',cellstr(string(linspace(0,maxtime,maxtime+1))'),...
+                    'YLim',[-.1 15]);
+                %'XTick',linspace(0,maxtime,1/dt),...
+                ax.Layer = 'top';
+                grid(ax);
+                obj.graphic_objects.(struct_inf) = ax;
+                hold(obj.graphic_objects.(struct_inf),'on');
+
+                % setup background image
+                if exist(CanvasConstants.BACKGROUND_IMAGE,'file') % check if exists
+                    im=imread(CanvasConstants.BACKGROUND_IMAGE); % read image
+                    obj.graphic_objects.(im_inf) = image(...
+                        'XData',...
+                        linspace(0,ax.XLim(2), size(im,1)),...
+                        'YData',...
+                        linspace(0,ax.YLim(2), size(im,2)),...
+                        'CData',im,'Parent',obj.graphic_objects.(struct_inf));
+                end
+            end
+   
         end
         %% setupAxesandImage : setup the axes and the background
         function setupAxesAndImage(obj, varargin)
@@ -533,22 +703,29 @@ classdef CanvasView < matlab.mixin.SetGet
                 curvature = 1;
                 sz = CanvasConstants.NEURON_size;
                 position = obj.model.neurons_positions(index,:) - sz/2;
-            end
-            
-            h = rectangle('Position', [position sz],...
+
+                h = rectangle('Position', [position sz],...
                 'Curvature', curvature,...
                 'FaceColor', col,...
                 'Tag', 'n',...
                 'Parent', obj.graphic_objects.axes);
                 uistack(h, 'top');
-                       
-            if type == 'n'
+
                 obj.graphic_objects.Neurons(index) = h;
-            else
-                obj.graphic_objects.Obstacles(index) = h;
+            end
+
+            if strcmp(type,'stimulus')
+                stim = obj.model.neuron_objects(index).stimulus;
+                obj.updateStimPlot(stim);
             end
             
-            obj.notify('graphicItemCreated', CanvasModelEventData(type,index));
+            if ~strcmp(type,'stimulus')
+                obj.notify('graphicItemCreated', CanvasModelEventData(type,index));
+            else
+                obj.formSelection('n',index)
+                %obj.enableForm('stim');
+            end
+            
         end
         %% addLink
         function addLink(obj,linktype,indexvect,pos)
@@ -672,6 +849,9 @@ classdef CanvasView < matlab.mixin.SetGet
                     viewNeurPos = viewNeurPos(:,1:2);
 %                     currentInd = find(~all(viewNeurPos - objLoc + CanvasConstants.NEURON_size/2,2));
                     [~,currentInd] = min(sum(abs(viewNeurPos - objLoc + CanvasConstants.NEURON_size/2),2));
+                        if ~isempty(obj.model.neuron_objects(index).stimulus)
+                            obj.updateStimPlot('delete');
+                        end
                 case 'l'
                     objectname = 'Links';
                     objID = obj.model.link_objects(index).ID;
@@ -730,6 +910,24 @@ classdef CanvasView < matlab.mixin.SetGet
             end
             
         end       
+        %% updateStimPlot
+        function updateStimPlot(obj,stim)
+            if strcmp(stim,'delete')
+                cla(obj.graphic_objects.axes_stim)
+            else
+                stim_wave = obj.model.neuron_objects(contains({obj.model.neuron_objects.name},stim.name(1:end-5))).stimulus.waveform;
+                %Update stimulus plot axes
+                cla(obj.graphic_objects.axes_stim)
+                plot(obj.graphic_objects.axes_stim,stim_wave,'LineWidth',2)
+                
+                totmem_wave = obj.model.neuron_objects(contains({obj.model.neuron_objects.name},stim.name(1:end-5))).totmem;
+                
+                %Update total membrane response plot axes
+                cla(obj.graphic_objects.axes_totmem)
+                plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
+
+            end
+        end
     end
     
 end

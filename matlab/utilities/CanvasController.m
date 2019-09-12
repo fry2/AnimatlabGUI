@@ -274,16 +274,21 @@ classdef CanvasController < handle
             
             cmenu = uicontextmenu(obj.fig);
             if type == 'n'
-                label1 = 'Delete Neuron';
-                label2 = 'Add Link';
+                label1 = 'Add Link';
+                label2 = 'Add Stimulus';
+                label3 = 'Delete Neuron';
                 vect = obj.view.graphic_objects.Neurons;
             end            
             uimenu(cmenu, ...
                 'Label', label1, ...
-                'Callback', @(~,~) obj.deleteSelection());
+                'Callback', @(~,~) obj.addLink());
             uimenu(cmenu, ...
                 'Label', label2, ...
-                'Callback', @(~,~) obj.addLink());
+                'Callback', @(~,~) obj.addStimulus());
+            uimenu(cmenu, ...
+                'Label', label3, ...
+                'Callback', @(~,~) obj.deleteSelection(),...
+                'Separator','on');
             vect(model_index).UIContextMenu = cmenu;
             
         end
@@ -585,6 +590,13 @@ classdef CanvasController < handle
             obj.model.addItem(type, obj.view.CurrentPoint(1,1:2),bounds);
             
         end
+        %% addStimulus: add a stimulus to a neuron
+        function addStimulus(obj)
+            bounds(1) = obj.view.graphic_objects.axes.XLim(2);
+            bounds(2) = obj.view.graphic_objects.axes.YLim(2);
+            selPos = obj.selection.Position(1:2)+CanvasConstants.NEURON_size/2;
+            obj.model.addItem('stimulus',selPos,bounds)
+        end
         %% addLink: add a link between two items
         function addLink(obj)
             if length(obj.selection) == 1
@@ -840,13 +852,35 @@ classdef CanvasController < handle
              end
             
             if sum(contains({obj.view.graphic_objects.Neurons.Selected},'on')) > 1
+                %multiple neurons have been selected by a bouding box
+                %in order to switch the selection to a neuron outside of that bounded group
+                %we need to decide whether the newly selected neuron is in the group or not
+                viewNeurPos = cell2mat({obj.view.graphic_objects.Neurons.Position}')+[CanvasConstants.NEURON_size/2 0 0];
+                [~,clickedNeur] = min(sum(abs(viewNeurPos(:,1:2)-cp),2));
                 selvec = contains({obj.view.graphic_objects.Neurons.Selected},'on');
-                sel = obj.view.graphic_objects.Neurons(selvec);
+                if ~selvec(clickedNeur)
+                    %the newly clicked neuron is not in the selected group
+                    %change the selection to it and deselect the group
+                    sel = obj.view.graphic_objects.Neurons(clickedNeur);
+                else
+                    %the selected neuron is a part of the selected group
+                    %keep the group selection the same
+                    sel = obj.view.graphic_objects.Neurons(selvec);
+                end
             else
+                %when not worried about groups, just make the selected object the fig.CurrentObject
                 sel = obj.fig.CurrentObject;
             end
             
-            if isa(sel, 'matlab.graphics.primitive.Rectangle') && size(sel,2) == 1
+            %include an option that keeps a neuron selected when you select a stimulus tab
+            %previously, selecting a tab would deselect the neuron
+            if ~strcmp(sel.Type,'image') && ~isempty(obj.selection) %"if not selecting the background space and the obj.selection is not empty"
+                if(strcmp(obj.selection.Type,'rectangle') && strcmp(sel.Type,'uitab')) %"if the obj.selection is a neuron and what you just clicked is a tab"
+                    sel = obj.selection; %set the selection object back to the neuron, essentially ignoring the tab selection
+                end
+            end
+            
+            if (isa(sel, 'matlab.graphics.primitive.Rectangle') && size(sel,2) == 1)
 
                 obj.setSelection(sel);
              
@@ -857,6 +891,9 @@ classdef CanvasController < handle
                 if sel.Tag == 'n'
                     model_n_pos = obj.model.neurons_positions;
                     [~,model_index] = min(sum(abs(model_n_pos-pos),2));
+                    obj.selection.UserData{1} = sel.Tag;
+                    obj.selection.UserData{2} = model_index;
+                    obj.selection.UserData{3} = model_n_pos;
                 else
                     model_index = find(all(pos==obj.model.obstacles_positions,2));
                 end
@@ -1043,9 +1080,24 @@ classdef CanvasController < handle
                 if selected_objs > 0
                     obj.setupContextMenu('groupselected');
                 end
-            elseif strcmp(obj.fig.SelectionType,'normal')
+%              elseif strcmp(obj.fig.SelectionType,'normal')
+            elseif ~isempty(obj.selection)
                 %if the user left-clicks, clear the selections. Don't clear selections if right-click
-               obj.clearSelections();
+                %when jumping from one neuron selection to another, deselect previously selected neuron/s
+                if size(obj.selection,2) > 1
+                    obj.clearSelections();
+                else
+                    viewNeurPos = cell2mat({obj.view.graphic_objects.Neurons.Position}');
+                    selectionPos = obj.selection.Position;
+                    [~,deselException] = min(sum(abs(viewNeurPos-selectionPos),2));
+                    for i=1:size(viewNeurPos,1)
+                        if i~=deselException
+                            obj.view.graphic_objects.Neurons(i).Selected = 'off';
+                        end
+                    end
+                end
+            else
+                obj.clearSelections();
             end
             
             obj.fig.WindowButtonMotionFcn = @(~,~) obj.defaultMotion();
@@ -1078,7 +1130,7 @@ classdef CanvasController < handle
                 delete(obj.view.graphic_objects.axes.Children(1));
             end  
             
-            obj.view.disableForm({'n','l'});
+            obj.view.disableForm({'n','l','stimulus'});
             obj.selection = gobjects(0);
             obj.graphic_objects.editMenu.Children(3).Enable = 'off';
             if all(size(obj.view.graphic_objects.Neurons))
@@ -1150,5 +1202,4 @@ classdef CanvasController < handle
             end
         end
     end
-    
 end
