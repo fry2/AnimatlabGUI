@@ -106,7 +106,6 @@ classdef CanvasView < matlab.mixin.SetGet
                         obj.graphic_objects.FormObjs{4}(3,2).String = stim.starttime;
                         obj.graphic_objects.FormObjs{4}(4,2).String = stim.endtime;
                         obj.graphic_objects.FormObjs{4}(5,2).Value = stim.enabled;
-                        obj.updateStimPlot(stim);
                         for i=1:size(obj.graphic_objects.FormObjs{4},1)
                             obj.graphic_objects.FormObjs{4}(i,2).UserData = {'stim',index};
                         end
@@ -114,6 +113,7 @@ classdef CanvasView < matlab.mixin.SetGet
                     else
                         obj.disableForm('stimulus')
                     end
+                    obj.updateStimPlot(neuron);
                 case 'l'
                     link = obj.model.link_objects(index);
                     synapse = obj.model.synapse_types(contains({obj.model.synapse_types.name},link.synaptictype));
@@ -526,7 +526,7 @@ classdef CanvasView < matlab.mixin.SetGet
                                 end
                             end
                             obj.model.updateStimModel(index)
-                            obj.updateStimPlot(obj.model.(node_type)(index).stimulus);
+                            obj.updateStimPlot(obj.model.(node_type)(index));
                         else
                             %NEURON OR LINK ENTRIES
                             % if the value that was entered is not the same type as that which is already in the document, don't accept it
@@ -550,6 +550,8 @@ classdef CanvasView < matlab.mixin.SetGet
                                     end 
                                 end
                             end
+                            obj.model.updateStimModel(index)
+                            obj.updateStimPlot(obj.model.(node_type)(index));
                         end
                 end
             else
@@ -609,9 +611,9 @@ classdef CanvasView < matlab.mixin.SetGet
             stimtab = stimpanel.Children.Children(1);
             memtab = stimpanel.Children.Children(2);
             % setup axes limits
-            dt = 5e-3;
-            stimendtime = 10;
-            maxtime = 10;
+            dt = obj.model.dtsim;
+            stimendtime = obj.model.tmax;
+            maxtime = obj.model.tmax;
             for i=1:2
                 switch i
                     case 1
@@ -715,8 +717,8 @@ classdef CanvasView < matlab.mixin.SetGet
             end
 
             if strcmp(type,'stimulus')
-                stim = obj.model.neuron_objects(index).stimulus;
-                obj.updateStimPlot(stim);
+                neuron = obj.model.neuron_objects(index);
+                obj.updateStimPlot(neuron);
             end
             
             if ~strcmp(type,'stimulus')
@@ -850,7 +852,7 @@ classdef CanvasView < matlab.mixin.SetGet
 %                     currentInd = find(~all(viewNeurPos - objLoc + CanvasConstants.NEURON_size/2,2));
                     [~,currentInd] = min(sum(abs(viewNeurPos - objLoc + CanvasConstants.NEURON_size/2),2));
                         if ~isempty(obj.model.neuron_objects(index).stimulus)
-                            obj.updateStimPlot('delete');
+                            obj.updateStimPlot('clear');
                         end
                 case 'l'
                     objectname = 'Links';
@@ -911,22 +913,54 @@ classdef CanvasView < matlab.mixin.SetGet
             
         end       
         %% updateStimPlot
-        function updateStimPlot(obj,stim)
-            if strcmp(stim,'delete')
+        function updateStimPlot(obj,neuron)
+            if ischar(neuron) && strcmp(neuron,'clear')
                 cla(obj.graphic_objects.axes_stim)
-            else
-                stim_wave = obj.model.neuron_objects(contains({obj.model.neuron_objects.name},stim.name(1:end-5))).stimulus.waveform;
-                %Update stimulus plot axes
-                cla(obj.graphic_objects.axes_stim)
-                plot(obj.graphic_objects.axes_stim,stim_wave,'LineWidth',2)
-                
-                totmem_wave = obj.model.neuron_objects(contains({obj.model.neuron_objects.name},stim.name(1:end-5))).totmem;
-                
-                %Update total membrane response plot axes
                 cla(obj.graphic_objects.axes_totmem)
-                plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
+            else
+                if ~isempty(neuron.stimulus)
+                    stim = neuron.stimulus;
+                    stim_wave = stim.waveform;
+                    totmem_wave = neuron.totmem;
+                    %Update stimulus plot axes
+                    cla(obj.graphic_objects.axes_stim)
+                    plot(obj.graphic_objects.axes_stim,stim_wave,'LineWidth',2)
 
+                    %Update total membrane response plot axes
+                    cla(obj.graphic_objects.axes_totmem)
+                    plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
+                else
+                    if ~isempty(neuron.totmem)
+                        totmem_wave = neuron.totmem;
+                        %Update total membrane response plot axes
+                        cla(obj.graphic_objects.axes_totmem)
+                        plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
+                    else
+                        cla(obj.graphic_objects.axes_stim)
+                        cla(obj.graphic_objects.axes_totmem)
+                    end
+                end
             end
+%             if strcmp(neuron,'clear')
+%                 cla(obj.graphic_objects.axes_stim)
+% %             elseif strcmp(stim,'onlytotmem')
+% %                 totmem_wave = obj.model.neuron_objects(contains({obj.model.neuron_objects.name},stim.name(1:end-5))).totmem;
+% %                 cla(obj.graphic_objects.axes_totmem)
+% %                 plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
+%             else
+%                 stim_wave = obj.model.neuron_objects(contains({obj.model.neuron_objects.name},stim.name(1:end-5))).stimulus.waveform;
+%                 %Update stimulus plot axes
+%                 cla(obj.graphic_objects.axes_stim)
+%                 plot(obj.graphic_objects.axes_stim,stim_wave,'LineWidth',2)
+%                 
+%                 oNeur = obj.model.neuron_objects(contains({obj.model.neuron_objects.name},stim.name(1:end-5)));
+%                 totmem_wave = oNeur.totmem;
+%                 
+%                 %Update total membrane response plot axes
+%                 cla(obj.graphic_objects.axes_totmem)
+%                 plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
+% 
+%             end
         end
     end
     

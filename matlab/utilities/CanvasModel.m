@@ -13,6 +13,9 @@ classdef CanvasModel < handle
         
         obstacles_positions = zeros(0,2)
         num_obstacles = 0        
+        
+        dtsim = 1e-3;
+        tmax = 10;
     end
     
     events (NotifyAccess = private)
@@ -110,6 +113,10 @@ classdef CanvasModel < handle
             obj.neuron_objects(end_ind).inlinks = [obj.neuron_objects(end_ind).inlinks;obj.link_objects(obj.num_links)];
             obj.neuron_objects(start_ind).outlink_IDs = [obj.neuron_objects(start_ind).outlink_IDs;{obj.link_objects(obj.num_links).ID}];
             obj.neuron_objects(end_ind).inlink_IDs = [obj.neuron_objects(end_ind).inlink_IDs;{obj.link_objects(obj.num_links).ID}];
+            
+            if ~isempty(obj.neuron_objects(start_ind).totmem)
+                obj.updateStimModel(end_ind);
+            end
 
             obj.notify('linkAdded', CanvasModelEventData(linktype,[index numLinks],[beg ennd]));
         end
@@ -206,7 +213,9 @@ classdef CanvasModel < handle
                         linkIDs = {obj.link_objects.ID};
                         linkIDstring = obj.neuron_objects(index).outlinks(1).ID;
                         linkind = find(strcmp(linkIDs, linkIDstring)==1);
+                        dNeurInd = find(contains({obj.neuron_objects.ID},obj.link_objects(linkind).destination_ID));
                         obj.deleteItem('l', linkind);
+                        obj.updateStimModel(dNeurInd);
                         numOutlinks = numOutlinks - 1;
                     end
                     while numInlinks > 0
@@ -315,6 +324,7 @@ classdef CanvasModel < handle
         end
         %% create_stimulus
         function create_stimulus(obj, neurModInd)
+            %Update the selected neuron's total neural response first
             newstim = struct;
             newstim.name = [obj.neuron_objects(neurModInd).ID(1:end-3),'-stim'];
             newstim.ID = ['stimID-',num2str(neurModInd)];
@@ -322,8 +332,8 @@ classdef CanvasModel < handle
             newstim.endtime = randi([5 8],1);
             newstim.amplitude = randi([10 15],1);
             newstim.enabled = 1;
-                dt = 5e-3;
-                simendtime = 10;
+                dt = obj.dtsim;
+                simendtime = obj.tmax;
                 t = 0:dt:simendtime;
 %                 stim_wave = 0*linspace(0,simendtime,1/dt);
                 stim_wave = zeros(size(t));
@@ -332,14 +342,46 @@ classdef CanvasModel < handle
             end_ind = ind(newstim.endtime);
             stim_wave(start_ind:end_ind) = newstim.amplitude;
             newstim.waveform = stim_wave;
-            Cm = 10; %%%%%
-            Gm = 1; %%%%%
-                totmem_wave = zeros(size(stim_wave));
-                for i = 2:length(stim_wave)
-                    totmem_wave(i) = totmem_wave(i-1) + (dt/Cm)*(stim_wave(i)-Gm*totmem_wave(i-1));
-                end
-            obj.neuron_objects(neurModInd).totmem = totmem_wave;
             obj.neuron_objects(neurModInd).stimulus = newstim;
+            obj.updateStimModel(neurModInd);
+            
+            %Now, iterate through any dependents and update their total response as well
+            if ~isempty(obj.neuron_objects(neurModInd).outlinks)
+                for i=1:length(obj.neuron_objects(neurModInd).outlinks)
+%                     oNeur = obj.neuron_objects(neurModInd);
+%                     dNeur = obj.neuron_objects(contains({obj.neuron_objects.ID},obj.neuron_objects(neurModInd).outlinks(i).destination_ID));
+                    dNeurInd = find(contains({obj.neuron_objects.ID},obj.neuron_objects(neurModInd).outlinks(i).destination_ID));
+                    obj.updateStimModel(dNeurInd);
+%                     dSyn = obj.synapse_types(contains({obj.synapse_types.name},obj.neuron_objects(neurModInd).outlinks(i).synaptictype));
+%                     delE = dSyn.delE;
+%                     R = 20;
+%                     dt= obj.dtsim;
+%                     Cm = 10;
+%                     if ~isempty(dSyn.k) && ~isempty(dSyn.c)
+%                         keyboard
+%                         fprintf('Error: synapse has both a k and c value. Should have one or the other.')
+%                     else
+%                         if isempty(dSyn.k)
+%                             csyn = dSyn.c;
+%                             gsyn = (csyn*R-R)/(delE-csyn*R);
+%                         else
+%                             ksyn = dSyn.k;
+%                             gsyn = (ksyn*R)/(delE-ksyn*R);
+%                         end
+%                     end
+%                     oWave = oNeur.totmem;
+%                     if isempty(dNeur.totmem)
+%                         dWave = zeros(size(oWave));
+%                     else
+%                         dWave = dNeur.totmem;
+%                     end
+%                     
+%                     for j = 2:length(dWave)
+%                         dWavemod(j) = dWave(j-1)+(dt/Cm)*(gsyn*(delE-oWave(j-1)));
+%                     end
+%                     obj.neuron_objects(contains({obj.neuron_objects.ID},dNeur.ID)).totmem = dWavemod;
+                end
+            end
         end
         %% create_link
         function link = create_link(~,pos)
@@ -548,33 +590,79 @@ classdef CanvasModel < handle
         end
         %% updateStimModel
         function updateStimModel(obj,neur_index)
-                %Hardcoded, to be changed
-                stim = obj.neuron_objects(neur_index).stimulus;
-                dt = 5e-3;
-                simendtime = 10;
+                neuron = obj.neuron_objects(neur_index);
+                dt = obj.dtsim;
+                simendtime = obj.tmax;
+                R = 20;
+                Cm = .1;
                 
-                %Calculate new stimulus
-                amp = stim.amplitude;
-                t = 0:dt:simendtime;
-                stim_wave = zeros(size(t));
-                ind = @(time) time/dt+1;
-                start_ind = ind(stim.starttime);
-                end_ind = ind(stim.endtime);
-                stim_wave(start_ind:end_ind) = amp;
+                Upost = zeros(1,simendtime/dt+1);
+                Upre = {};
                 
-                %Store the stimulus waveform in the model
-                obj.neuron_objects(neur_index).stimulus.waveform = stim_wave;
-                
-                %Calculate new total membrane response
-                Cm = 10; %%%%%
-                Gm = 1; %%%%%
-                totmem_wave = zeros(size(stim_wave));
-                for i = 2:length(stim_wave)
-                    totmem_wave(i) = totmem_wave(i-1) + (dt/Cm)*(stim_wave(i)-Gm*totmem_wave(i-1));
+                if ~isempty(neuron.inlinks)
+                    Upre = cell(length(neuron.inlinks),3);
+                    for i = 1:length(neuron.inlinks)
+                        oNeur = obj.neuron_objects(contains({obj.neuron_objects.ID},neuron.inlinks(i).origin_ID));
+                        oLink = neuron.inlinks(i);
+                        oSyn = obj.synapse_types(contains({obj.synapse_types.name},oLink.synaptictype));
+                        delE = oSyn.delE;
+                        if ~isempty(oSyn.k) && ~isempty(oSyn.c)
+                            keyboard
+                            fprintf('Error: synapse has both a k and c value. Should have one or the other.')
+                        else
+                            if isempty(oSyn.k)
+                                csyn = oSyn.c;
+                                gMax = (csyn*R-R)/(delE-csyn*R);
+                            else
+                                ksyn = oSyn.k;
+                                gMax = (ksyn*R)/(delE-ksyn*R);
+                            end
+                        end
+                        if ~isempty(oNeur.totmem)
+                            Upre{i,1} = (dt/Cm)*(gMax/R);
+                            Upre{i,2} = delE;
+                            Upre{i,3} = oNeur.totmem;
+                        else
+                            break
+                        end
+                    end
                 end
                 
-                %Store the total membrane response in the model
-                obj.neuron_objects(neur_index).totmem = totmem_wave;
+                if ~isempty(neuron.stimulus)
+                    %Hardcoded, to be changed
+                    stim = neuron.stimulus;
+                    dt = obj.dtsim;
+                    simendtime = obj.tmax;
+
+                    %Gather stimulus info
+                    amp = stim.amplitude;
+                    t = 0:dt:simendtime;
+
+                    %Make new stimulus waveform
+                    Iapp = zeros(size(t));
+                    ind = @(time) time/dt+1;
+                    start_ind = ind(stim.starttime);
+                    end_ind = ind(stim.endtime);
+                    Iapp(start_ind:end_ind) = amp;
+
+                    %Store the stimulus waveform in the model
+                    neuron.stimulus.waveform = Iapp;
+                else
+                    Iapp = zeros(1,simendtime/dt+1);
+                end
+
+                for i = 2:length(Upost)
+                    inlink_adder = 0;
+                    for j = 1:size(Upre,1)
+                        inlink_adder = inlink_adder + Upre{j,1}*Upre{j,3}(i-1)*(Upre{j,2}-Upost(i-1));
+                    end
+                    stimterm(i-1) = (dt/Cm)*Iapp(i);
+                    uposterm(i-1) = (1-dt/Cm)*Upost(i-1);
+                    Upost(i) = (1-dt/Cm)*Upost(i-1)+(dt/Cm)*Iapp(i)+inlink_adder;
+                end
+                
+                neuron.totmem = Upost;
+                obj.neuron_objects(neur_index) = neuron;
         end
     end
     

@@ -842,7 +842,7 @@ classdef CanvasController < handle
                     linkpos1 = obj.selection.Position(1:2)+CanvasConstants.NEURON_size/2;
                     start_neur = [all(linkpos1>(Npos-CanvasConstants.NEURON_size/2),2),all(linkpos1<(Npos+CanvasConstants.NEURON_size/2),2)];
                     start_ind = find(all(start_neur,2));
-                    if isempty(end_ind)
+                    if isempty(end_ind) || start_ind==end_ind
                         obj.fig.CurrentObject = [];
                     else
                         obj.fig.CurrentObject = obj.view.graphic_objects.Neurons(1,end_ind);
@@ -874,9 +874,11 @@ classdef CanvasController < handle
             
             %include an option that keeps a neuron selected when you select a stimulus tab
             %previously, selecting a tab would deselect the neuron
-            if ~strcmp(sel.Type,'image') && ~isempty(obj.selection) %"if not selecting the background space and the obj.selection is not empty"
-                if(strcmp(obj.selection.Type,'rectangle') && strcmp(sel.Type,'uitab')) %"if the obj.selection is a neuron and what you just clicked is a tab"
-                    sel = obj.selection; %set the selection object back to the neuron, essentially ignoring the tab selection
+            if ~isempty(sel)
+                if ~strcmp(sel.Type,'image') && ~isempty(obj.selection) %"if not selecting the background space and the obj.selection is not empty"
+                    if(strcmp(obj.selection.Type,'rectangle') && strcmp(sel.Type,'uitab')) %"if the obj.selection is a neuron and what you just clicked is a tab"
+                        sel = obj.selection; %set the selection object back to the neuron, essentially ignoring the tab selection
+                    end
                 end
             end
             
@@ -1081,7 +1083,7 @@ classdef CanvasController < handle
                     obj.setupContextMenu('groupselected');
                 end
 %              elseif strcmp(obj.fig.SelectionType,'normal')
-            elseif ~isempty(obj.selection)
+            elseif ~isempty(obj.selection) && isvalid(obj.selection)
                 %if the user left-clicks, clear the selections. Don't clear selections if right-click
                 %when jumping from one neuron selection to another, deselect previously selected neuron/s
                 if size(obj.selection,2) > 1
