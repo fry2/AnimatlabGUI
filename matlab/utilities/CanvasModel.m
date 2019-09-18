@@ -618,12 +618,12 @@ classdef CanvasModel < handle
                                 gMax = (ksyn*R)/(delE-ksyn*R);
                             end
                         end
-                        if ~isempty(oNeur.totmem)
                             Upre{i,1} = (dt/Cm)*(gMax/R);
                             Upre{i,2} = delE;
+                        if ~isempty(oNeur.totmem)
                             Upre{i,3} = oNeur.totmem;
                         else
-                            break
+                            Upre{i,3} = zeros(1,simendtime/dt+1);
                         end
                     end
                 end

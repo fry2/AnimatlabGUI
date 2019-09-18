@@ -109,7 +109,13 @@ classdef CanvasView < matlab.mixin.SetGet
                         for i=1:size(obj.graphic_objects.FormObjs{4},1)
                             obj.graphic_objects.FormObjs{4}(i,2).UserData = {'stim',index};
                         end
-                        obj.enableForm('stimulus');
+                        if ~isempty(neuron.totmem)
+                            obj.enableForm('stimprev');
+                        else
+                        	obj.enableForm('stimulus');
+                        end
+                    elseif isempty(neuron.stimulus) && ~isempty(neuron.totmem)
+                        obj.enableForm('totmem');
                     else
                         obj.disableForm('stimulus')
                     end
@@ -168,6 +174,7 @@ classdef CanvasView < matlab.mixin.SetGet
                 childrenInfo{i} = obj.Parent.Children(i).UserData;
             end
             component_panel = strcmp(childrenInfo,'Component Data Panel');
+            stimulus_panel = strcmp(childrenInfo,'Stimulus Information Panel');
             for k = 1:length(type)
                 switch type{k}
                     case 'n'
@@ -179,6 +186,14 @@ classdef CanvasView < matlab.mixin.SetGet
                         obj.Parent.Children(component_panel).Children.SelectedTab = selected_tab;
                         formnumber = 3;
                     case 'stimulus'
+                        selected_tab = obj.Parent.Children(stimulus_panel).Children.Children(1);
+                        obj.Parent.Children(stimulus_panel).Children.SelectedTab = selected_tab;
+                        formnumber = 4;
+                    case 'totmem'
+                        selected_tab = obj.Parent.Children(stimulus_panel).Children.Children(2);
+                        obj.Parent.Children(stimulus_panel).Children.SelectedTab = selected_tab;
+                        formnumber = 4;
+                    case 'stimprev'
                         formnumber = 4;
                 end
                 numFormObjs = size(obj.graphic_objects.FormObjs{formnumber},1);
@@ -527,6 +542,12 @@ classdef CanvasView < matlab.mixin.SetGet
                             end
                             obj.model.updateStimModel(index)
                             obj.updateStimPlot(obj.model.(node_type)(index));
+                            if ~isempty(obj.model.(node_type)(index).outlinks)
+                                for i=1:size(obj.model.(node_type)(index).outlinks,1)
+                                    dNeurInd = find(contains({obj.model.(node_type).ID},obj.model.(node_type)(index).outlinks(1).destination_ID));
+                                    obj.model.updateStimModel(dNeurInd);
+                                end
+                            end
                         else
                             %NEURON OR LINK ENTRIES
                             % if the value that was entered is not the same type as that which is already in the document, don't accept it
@@ -928,12 +949,20 @@ classdef CanvasView < matlab.mixin.SetGet
 
                     %Update total membrane response plot axes
                     cla(obj.graphic_objects.axes_totmem)
+
+                    totmem_axes = obj.graphic_objects.axes_totmem;
+                    totmem_axes.YLim(2) = max(15,1.1*max(totmem_wave));
+                    obj.graphic_objects.axes_totmem = totmem_axes;
                     plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
                 else
                     if ~isempty(neuron.totmem)
-                        totmem_wave = neuron.totmem;
                         %Update total membrane response plot axes
+                        totmem_wave = neuron.totmem;
                         cla(obj.graphic_objects.axes_totmem)
+
+                        totmem_axes = obj.graphic_objects.axes_totmem;
+                        totmem_axes.YLim(2) = max(15,1.1*max(totmem_wave));
+                        obj.graphic_objects.axes_totmem = totmem_axes;
                         plot(obj.graphic_objects.axes_totmem,totmem_wave,'LineWidth',2)
                     else
                         cla(obj.graphic_objects.axes_stim)

@@ -870,13 +870,14 @@ classdef CanvasController < handle
             else
                 %when not worried about groups, just make the selected object the fig.CurrentObject
                 sel = obj.fig.CurrentObject;
+                selvec = [];
             end
             
             %include an option that keeps a neuron selected when you select a stimulus tab
             %previously, selecting a tab would deselect the neuron
-            if ~isempty(sel)
+            if ~isempty(sel) && isempty(selvec) && size(obj.selection,2) < 2
                 if ~strcmp(sel.Type,'image') && ~isempty(obj.selection) %"if not selecting the background space and the obj.selection is not empty"
-                    if(strcmp(obj.selection.Type,'rectangle') && strcmp(sel.Type,'uitab')) %"if the obj.selection is a neuron and what you just clicked is a tab"
+                    if (strcmp(obj.selection.Type,'rectangle') && strcmp(sel.Type,'uitab')) %"if the obj.selection is a neuron and what you just clicked is a tab"
                         sel = obj.selection; %set the selection object back to the neuron, essentially ignoring the tab selection
                     end
                 end
@@ -1083,19 +1084,23 @@ classdef CanvasController < handle
                     obj.setupContextMenu('groupselected');
                 end
 %              elseif strcmp(obj.fig.SelectionType,'normal')
-            elseif ~isempty(obj.selection) && isvalid(obj.selection)
+            elseif ~isempty(obj.selection) && all(isvalid(obj.selection))
                 %if the user left-clicks, clear the selections. Don't clear selections if right-click
                 %when jumping from one neuron selection to another, deselect previously selected neuron/s
-                if size(obj.selection,2) > 1
-                    obj.clearSelections();
-                else
-                    viewNeurPos = cell2mat({obj.view.graphic_objects.Neurons.Position}');
-                    selectionPos = obj.selection.Position;
-                    [~,deselException] = min(sum(abs(viewNeurPos-selectionPos),2));
-                    for i=1:size(viewNeurPos,1)
-                        if i~=deselException
-                            obj.view.graphic_objects.Neurons(i).Selected = 'off';
+%                 if size(obj.selection,2) > 1
+%                     %obj.clearSelections();
+                if ~strcmp(obj.fig.SelectionType,'alt')
+                    if size(obj.selection,2) < 2
+                        viewNeurPos = cell2mat({obj.view.graphic_objects.Neurons.Position}');
+                        selectionPos = obj.selection.Position;
+                        [~,deselException] = min(sum(abs(viewNeurPos-selectionPos),2));
+                        for i=1:size(viewNeurPos,1)
+                            if i~=deselException
+                                obj.view.graphic_objects.Neurons(i).Selected = 'off';
+                            end
                         end
+                    else
+                        obj.clearSelections();
                     end
                 end
             else
